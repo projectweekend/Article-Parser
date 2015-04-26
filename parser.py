@@ -7,7 +7,7 @@ from rabbit import Listener
 from utils import articles_collection
 
 
-def main():
+def parse_config():
     try:
         with open('./config.yml') as file:
             config = yaml.safe_load(file)
@@ -30,10 +30,20 @@ def main():
         print("'mongo_url' property is missing in 'config.yml'")
         sys.exit(1)
 
-    collection = articles_collection(mongo_url)
+    return (target_words, rabbit_url, mongo_url, )
 
-    def save_article(article):
-        doc = {
+
+def parse_article(url):
+    article = Article(url)
+    article.download()
+    try:
+        article.parse()
+        article.nlp()
+    except ArticleException:
+        # TODO: log the error
+        return None
+    else:
+        return {
             'url': article.url,
             'title': article.title,
             'keywords': article.keywords,
@@ -41,22 +51,23 @@ def main():
             'images': article.images,
             'movies': article.movies
         }
+
+
+def main():
+    target_words, rabbit_url, mongo_url = parse_config()
+
+    collection = articles_collection(mongo_url)
+
+    def save_article(doc):
         try:
             collection.insert(doc)
         except DuplicateKeyError:
             pass
 
     def action(message):
-        article = Article(message['url'])
-        article.download()
-        try:
-            article.parse()
-            article.nlp()
-        except ArticleException:
-            pass
-        else:
-            if target_words < set(article.keywords):
-                save_article(article)
+        parsed = parse_article(message['url'])
+        if parsed and (target_words < set(parsed['keywords'])):
+            save_article(parsed)
 
     listener = Listener(rabbit_url=rabbit_url, action=action)
     listener.run()
