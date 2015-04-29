@@ -55,7 +55,6 @@ def parse_article(url):
 
 def main():
     target_words, rabbit_url, mongo_url = parse_config()
-
     collection = articles_collection(mongo_url)
 
     def save_article(doc):
